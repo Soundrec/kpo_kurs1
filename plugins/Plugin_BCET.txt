@@ -1,0 +1,145 @@
+// DLL_Plugin_sample.cpp: определяет экспортированные функции для приложения DLL.
+//
+
+#include "stdafx.h"
+#include "PluginBase.h"
+#include <omp.h>
+
+
+// Простые интерфейсные функции Реализация
+
+DLLEXPORT const char* PluginFunctions()
+{
+	return "BCET1 Message";
+}
+
+DLLEXPORT const char* PluginDescriptions(char* str)
+{
+	if (strcmp(str, "BCET1") == 0) return "BCET1";
+	if (strcmp(str, "Message bcet") == 0) return "some sample message bcet";
+	return "Not found bcet";
+}
+
+DLLEXPORT const char* PluginCFG(char* str)
+{
+	if (strcmp(str, "BCET1") == 0) return "Label;L1;10;10;BCET!TrackBar;INPUT_1;10;30;150;0;510;255;255;1!Label;LBINPUT_1;170;40;0!1";
+	if (strcmp(str, "Message bcet") == 0) return "";
+	return "Label;L1;10;10;Not found!0 3";
+}
+
+DLLEXPORT const char* GetPluginType(char* str)
+{
+	if (strcmp(str, "BCET1") == 0) return "IMG2IMG";  // будет как список
+	if (strcmp(str, "Message bcet") == 0) return "MSGBox";  // бедет встраиваться в меню
+	return "Not found bcet";
+}
+
+DLLEXPORT const char* PluginLabName(char* str)
+{
+	if (strcmp(str, "BCET1") == 0) return "BCET1";
+	if (strcmp(str, "Message bcet") == 0) return "Тестовое сообщение bcet";
+	return "Not found bcet";
+}
+
+/// Перечень экспортируемых функций
+DLLEXPORT double BCET1(unsigned char* InIMG, unsigned char* OutIMG, const int Width, const int Heigth, char* str);
+DLLEXPORT const char* Message();
+
+
+// Непосредственное реализация методов
+
+const char* Message()
+{
+	return "BCET1 function 2023";
+}
+
+double BCET1(unsigned char* InIMG, unsigned char* OutIMG, const int Width, const int Height, char* str)
+{
+
+    double offset = 0;
+    double time_s = omp_get_wtime();
+    sscanf_s(str, "%d", &offset);
+
+
+    double r, g, b;
+
+    int frequency = 0;
+    int counter = 0;
+
+    double a_v = 0, b_v = 0, c_v = 0;
+
+    int Gmin = 0;
+    int Gmax = 255;
+    int Gmean = 100;
+
+	counter++;
+
+	unsigned int pixel_count = (unsigned int)(Width * Height);
+	unsigned char Lmin = 255;
+	unsigned char Lmax = 0;
+	double Lmean = 0;
+	double Mssum = 0;
+	double LMssum = 0;
+	int value = 0;
+
+	int rowSize = Width * 4;
+	int stride = rowSize;
+	if (stride % 4 != 0)
+	{
+		stride = rowSize + (4 - stride % 4);
+	}
+
+	if (counter > frequency) {
+		counter = 0;
+		for (int tmpChannel = 0; tmpChannel < 3; tmpChannel++)
+		{
+			for (int dy = 0; dy < Height; dy++)
+			{
+				int y = dy * stride;
+				for (int x = 0; x < Width; x++)
+				{
+					int pos = x * 4 + y;
+					unsigned char val = InIMG[pos + tmpChannel];
+					Lmin = min(Lmin, val);
+					Lmax = max(Lmax, val);
+					Lmean += val;
+					Mssum += (unsigned long)pow(val, 2);
+				}
+			}
+
+			Lmean /= pixel_count;
+			LMssum = (Mssum / pixel_count);
+
+	
+
+		
+
+			double bnum = pow(Lmax, 2) * (Gmean - Gmin) - LMssum * (Gmax - Gmin) + pow(Lmin, 2) * (Gmax - Gmean);
+			double bden = 2 * (Lmax * (Gmean - Gmin) - Lmean * (Gmax - Gmin) + Lmin * (Gmax - Gmean));
+
+			b_v = bnum / bden;
+
+			a_v = (Gmax - Gmin) / ((Lmax - Lmin) * (Lmax + Lmin - 2 * b_v));
+			c_v = Gmin - a_v * pow((Lmin - b_v), 2);
+		}
+	}
+	for (int tmpChannel = 0; tmpChannel < 3; tmpChannel++)
+	{
+		for (int dy = 0; dy < Height; dy++)
+		{
+			int y = dy * stride;
+			for (int x = 0; x < Width; x++)
+			{
+				int pos = x * 4 + y;
+				unsigned char val = InIMG[pos + tmpChannel];
+
+		
+				double val_n = a_v * (val - b_v)* (val - b_v) + c_v;
+
+				OutIMG[pos + tmpChannel] = set255(val_n);
+			}
+		}
+	}
+    return omp_get_wtime() - time_s;
+}
+

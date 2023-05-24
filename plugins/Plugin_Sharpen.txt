@@ -1,0 +1,124 @@
+// DLL_Plugin_sample.cpp: определяет экспортированные функции для приложения DLL.
+//
+
+#include "stdafx.h"
+#include "PluginBase.h"
+#include <omp.h>
+
+
+// Простые интерфейсные функции Реализация
+
+DLLEXPORT const char* PluginFunctions()
+{
+	return "Sharpen Message";
+}
+
+DLLEXPORT const char* PluginDescriptions(char* str)
+{
+	if (strcmp(str, "Sharpen") == 0) return "Sharpen in YUV mode";
+	if (strcmp(str, "Message3") == 0) return "some sample message 3";
+	return "Not found 3";
+}
+
+DLLEXPORT const char* PluginCFG(char* str)
+{
+	if (strcmp(str, "Sharpen") == 0) return "Label;L1;10;10;Sharpen!TrackBar;INPUT_1;10;30;150;0;510;255;255;1!Label;LBINPUT_1;170;40;0!1";
+	if (strcmp(str, "Message3") == 0) return "";
+	return "Label;L1;10;10;Not found!0 3";
+}
+
+DLLEXPORT const char* GetPluginType(char* str)
+{
+	if (strcmp(str, "Sharpen") == 0) return "IMG2IMG";  // будет как список
+	if (strcmp(str, "Message3") == 0) return "MSGBox";  // бедет встраиваться в меню
+	return "Not found";
+}
+
+DLLEXPORT const char* PluginLabName(char* str)
+{
+	if (strcmp(str, "Sharpen") == 0) return "Sharpen";
+	if (strcmp(str, "Message3") == 0) return "Тестовое сообщение 3";
+	return "Not found 3";
+}
+
+/// Перечень экспортируемых функций
+DLLEXPORT double Sharpen(unsigned char* InIMG, unsigned char* OutIMG, const int Width, const int Heigth, char* str);
+DLLEXPORT const char* Message();
+
+
+// Непосредственное реализация методов
+
+const char* Message()
+{
+	return "Sharpen function 2023";
+}
+
+double Sharpen(unsigned char* InIMG, unsigned char* OutIMG, const int Width, const int Height, char* str)
+{
+
+    double offset = 0;
+    double time_s = omp_get_wtime();
+    sscanf_s(str, "%d", &offset);
+
+    offset = (offset+255) / 510 * 2;
+    offset = offset > 2 ? 2 : offset;
+    offset = offset < 0 ? 0 : offset;
+
+    float mask[3][4] =
+    {
+      {-1, -1, -1},
+      {-1,  8+offset, -1},
+      {-1, -1, -1}
+    };
+
+    double r, g, b;
+    int rowSize = Width * 4;
+    int stride = rowSize;
+    if (stride % 4 != 0)
+    {
+        stride = rowSize + (4 - stride % 4);
+    }
+
+    for (int dy = 0; dy < Height; dy++)
+    {
+        int y = dy * stride;
+        for (int kx = 0; kx < Width; kx++)
+        {
+            int pos = kx * 4 + y;
+            r = 0;
+            g = 0;
+            b = 0;
+            for (int j = -1; j <= 1; j++)
+            {
+                int ty = dy + j;
+                if (ty < 0) ty = 0;
+                if (ty >= Height) ty = Height - 1;
+
+
+                for (int i = -1; i <= 1; i++)
+                {
+                    int tx = kx + i;
+                    if (tx < 0) tx = 0;
+                    if (tx >= Width) tx = Width - 1;
+                    int pos2 = (tx) * 4 + (ty) * stride;
+                    b += InIMG[pos2] * mask[i + 1][j + 1];
+                    g += InIMG[pos2 + 1] * mask[i + 1][j + 1];
+                    r += InIMG[pos2 + 2] * mask[i + 1][j + 1];
+                   
+
+                }
+            }
+
+
+
+            OutIMG[pos] = set255(b); ///9;
+            OutIMG[pos + 1] = set255(g); // / 9;
+            OutIMG[pos + 2] = set255(r);// / 9;
+            OutIMG[pos + 3] = 0;
+        }
+
+    }
+
+    return omp_get_wtime() - time_s;
+}
+
